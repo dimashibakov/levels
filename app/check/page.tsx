@@ -1,102 +1,101 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { LevelVial } from "@/components/LevelVial";
-import { TIER_META, type Tier, type CheckAnswers } from "@/lib/scoring";
+import type { CheckAnswers, Tier } from "@/lib/scoring";
 import { submitCheck } from "./actions";
+import { CheckProgress } from "./CheckProgress";
+import { CheckNav } from "./CheckNav";
+import { QuestionStep } from "./QuestionStep";
+import { ReassuranceStep } from "./ReassuranceStep";
+import { ResultStep, ResponseStep } from "./ResultStep";
+import { FLOW_STEPS, isSafetyItem, progressSegments, type FlowStep } from "./steps";
 
-const PHQ = [
-  ["c1", "Over the last couple weeks — how often has stuff you care about felt not worth the effort?"],
-  ["c2", "…and how often did it feel flat, low, or done?"],
-  ["d4", "Shorter fuse than usual — snapping at people who didn't earn it?"],
-  ["d5", "Drinking more, or leaning on something to take the edge off?"],
-] as const;
+import { STRINGS } from "./strings";
 
-const SAFE = [
-  ["s1", "In the last month, wished you could go to sleep and not wake up?"],
-  ["s2", "Had actual thoughts of ending your life?"],
-] as const;
-
-const OPTS = ["Rarely", "Some days", "Most days", "Nearly every day"];
-
-export default function Check() {
+export default function CheckPage() {
+  const [stepIndex, setStepIndex] = useState(0);
   const [phq, setPhq] = useState<Record<string, number>>({});
   const [safety, setSafety] = useState<Record<string, 0 | 1>>({});
-  const [result, setResult] = useState<Tier | null>(null);
+  const [tier, setTier] = useState<Tier | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  async function finish() {
-    const answers: CheckAnswers = { phq, safety };
-    const r = await submitCheck(answers);
-    setResult(r.tier);
+  const step: FlowStep = FLOW_STEPS[stepIndex];
+
+  function goBack() {
+    if (stepIndex > 0) setStepIndex((i) => i - 1);
   }
 
-  if (result) {
-    const m = TIER_META[result];
+  async function goNext() {
+    if (step.kind === "question" && step.code === "s3") {
+      setSubmitting(true);
+      try {
+        const answers: CheckAnswers = { phq, safety };
+        const result = await submitCheck(answers);
+        setTier(result.tier);
+        setStepIndex((i) => i + 1);
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    setStepIndex((i) => i + 1);
+  }
+
+  function canAdvance(): boolean {
+    if (step.kind === "reassurance") return true;
+    if (step.kind === "question") {
+      if (isSafetyItem(step.code)) return safety[step.code] !== undefined;
+      return phq[step.code] !== undefined;
+    }
+    return true;
+  }
+
+  if (step.kind === "result" && tier) {
     return (
       <div className="px-[22px] py-6">
-        <div className="mb-3 text-xs font-bold uppercase tracking-widest text-brand">Your read</div>
-        <div className="my-4"><LevelVial tier={result} /></div>
-        <div className="text-2xl font-extrabold" style={{ color: m.color }}>{m.en}</div>
-        <p className="mt-2 text-[15px] text-ink2">
-          A snapshot of the last couple of weeks, not a verdict. The level moves.
-        </p>
-        {result === "edge" && (
-          <div className="mt-4 rounded-card border border-line bg-card p-4">
-            <div className="text-3xl font-extrabold text-brand">988</div>
-            <p className="mt-1.5 text-[13px] text-ink2">
-              A trained counselor — not the police. Reach out before the peak.
-            </p>
-          </div>
-        )}
-        <Link href="/today" className="mt-6 block rounded-2xl bg-brand py-4 text-center font-bold text-white">
-          Done
-        </Link>
+        <ResultStep tier={tier} onContinue={() => setStepIndex((i) => i + 1)} />
       </div>
     );
   }
 
+  if (step.kind === "response" && tier) {
+    return (
+      <div className="px-[22px] py-6">
+        <ResponseStep tier={tier} />
+      </div>
+    );
+  }
+
+  const stageLabel =
+    step.kind === "result" || step.kind === "response" ? null : STRINGS.stages[step.stage];
+
   return (
     <div className="px-[22px] py-6">
-      <div className="mb-4 text-xs font-bold uppercase tracking-widest text-brand">Daily check</div>
+      <CheckProgress segments={progressSegments(step)} />
 
-      {PHQ.map(([id, q]) => (
-        <div key={id} className="mb-5">
-          <div className="mb-2 text-[16px] font-semibold">{q}</div>
-          <div className="grid grid-cols-2 gap-2">
-            {OPTS.map((o, v) => (
-              <button
-                key={o}
-                onClick={() => setPhq({ ...phq, [id]: v })}
-                className={`rounded-xl border p-3 text-left text-[13px] ${phq[id] === v ? "border-brand bg-brandsoft font-semibold" : "border-line bg-card text-ink2"}`}
-              >
-                {o}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
+      {stageLabel && (
+        <div className="mb-4 text-xs font-bold uppercase tracking-widest text-brand">{stageLabel}</div>
+      )}
 
-      {SAFE.map(([id, q]) => (
-        <div key={id} className="mb-5">
-          <div className="mb-2 text-[16px] font-semibold">{q}</div>
-          <div className="grid grid-cols-2 gap-2">
-            {[["No", 0], ["Yes", 1]].map(([label, v]) => (
-              <button
-                key={label as string}
-                onClick={() => setSafety({ ...safety, [id]: v as 0 | 1 })}
-                className={`rounded-xl border p-3 text-left text-[13px] ${safety[id] === v ? "border-edge bg-edgesoft font-semibold" : "border-line bg-card text-ink2"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
+      {step.kind === "reassurance" && <ReassuranceStep />}
 
-      <button onClick={finish} className="mt-2 w-full rounded-2xl bg-brand py-4 font-bold text-white">
-        Show my level
-      </button>
+      {step.kind === "question" && (
+        <QuestionStep
+          code={step.code}
+          phq={phq}
+          safety={safety}
+          onPhq={(code, value) => setPhq((prev) => ({ ...prev, [code]: value }))}
+          onSafety={(code, value) => setSafety((prev) => ({ ...prev, [code]: value as 0 | 1 }))}
+        />
+      )}
+
+      <CheckNav
+        onBack={goBack}
+        onNext={goNext}
+        nextDisabled={!canAdvance()}
+        nextLoading={submitting}
+        showBack={stepIndex > 0}
+      />
     </div>
   );
 }

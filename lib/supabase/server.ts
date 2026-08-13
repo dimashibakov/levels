@@ -22,8 +22,9 @@ export function createClient() {
             list.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             );
-          } catch {
-            // called from a Server Component — safe to ignore
+          } catch (err) {
+            // Server Components can't set cookies; Server Actions can — log if it fails.
+            console.error("[levels:supabase/server] cookie setAll failed:", err);
           }
         },
       },

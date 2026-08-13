@@ -1,20 +1,58 @@
 import Link from "next/link";
 import { LevelVial } from "@/components/LevelVial";
+import { TIER_META, type Tier } from "@/lib/scoring";
+import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
 
-// Alpha: level is static until a check writes it. Wire to the latest
-// check_session once Supabase is connected.
-export default function Today() {
-  const tier = "in_level" as const;
+const TIER_HINT: Record<Tier, string> = {
+  in_level: "Steady read. Sleep and a short walk are holding you level.",
+  off_level: "Something's pulling you off level. Worth a closer look.",
+  edge: "You're carrying a lot. What you marked matters — use what helps.",
+};
+
+async function getLatestTier(): Promise<Tier | null> {
+  if (!hasSupabaseEnv()) return null;
+
+  try {
+    const supabase = createClient();
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) return null;
+
+    const { data, error } = await supabase
+      .from("check_sessions")
+      .select("tier")
+      .eq("user_id", auth.user.id)
+      .not("completed_at", "is", null)
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data?.tier) return null;
+    return data.tier as Tier;
+  } catch {
+    return null;
+  }
+}
+
+export default async function Today() {
+  const latestTier = await getLatestTier();
+  const hasCheck = latestTier !== null;
+  const displayTier: Tier = latestTier ?? "in_level";
+  const meta = TIER_META[displayTier];
+
   return (
     <div>
       <h1 className="mb-2 mt-1 text-3xl font-extrabold tracking-tight">LEVELS</h1>
 
       <div className="mb-4 rounded-card bg-card p-5 shadow-sm">
         <div className="text-sm font-semibold text-mute">Your level</div>
-        <div className="mb-1 text-3xl font-extrabold text-good">In level</div>
-        <div className="my-4"><LevelVial tier={tier} /></div>
+        <div className="mb-1 text-3xl font-extrabold" style={{ color: meta.color }}>
+          {hasCheck ? meta.en : "—"}
+        </div>
+        <div className="my-4">
+          <LevelVial tier={displayTier} />
+        </div>
         <p className="text-[15px] leading-snug text-ink2">
-          Steady read. Sleep and a short walk are holding you level.
+          {hasCheck ? TIER_HINT[displayTier] : "Take your first check to see where you're holding."}
         </p>
       </div>
 
@@ -23,7 +61,9 @@ export default function Today() {
         className="flex items-center justify-between rounded-2xl bg-brand px-5 py-4 text-white"
       >
         <div>
-          <div className="text-base font-bold">Run today&apos;s check</div>
+          <div className="text-base font-bold">
+            {hasCheck ? "Run today's check" : "Take your first check"}
+          </div>
           <div className="text-xs opacity-85">2 min · private · no one gets called</div>
         </div>
         <span className="grid h-8 w-8 place-items-center rounded-full bg-white/20">→</span>

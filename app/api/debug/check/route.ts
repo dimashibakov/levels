@@ -12,8 +12,45 @@ function pgError(error: { message?: string; code?: string } | null) {
   };
 }
 
+function decodeJwtClaims(token: string): { role: string | null; ref: string | null } | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return {
+      role: typeof payload.role === "string" ? payload.role : null,
+      ref: typeof payload.ref === "string" ? payload.ref : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function keyFingerprint() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) {
+    return { exists: false, length: 0, first4: null, last6: null, hasWhitespace: false, format: "other" as const, claims: null };
+  }
+
+  const format = key.startsWith("eyJ")
+    ? ("jwt" as const)
+    : key.startsWith("sb_secret")
+      ? ("sb_secret" as const)
+      : ("other" as const);
+
+  return {
+    exists: true,
+    length: key.length,
+    first4: key.slice(0, 4),
+    last6: key.slice(-6),
+    hasWhitespace: /\s/.test(key),
+    format,
+    claims: format === "jwt" ? decodeJwtClaims(key) : null,
+  };
+}
+
 export async function GET() {
-  const out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = { keyFingerprint: keyFingerprint() };
 
   try {
     out.hasServiceRole = hasServiceRole();

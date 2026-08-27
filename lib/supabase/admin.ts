@@ -2,9 +2,9 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-export const ALPHA_EMAIL = "alpha@levels.local";
+export const ALPHA_EMAIL = "alpha@levels.app";
 
-const LOG = "[levels:admin]";
+export type AlphaUserResult = { userId: string | null; error: string | null };
 
 export function hasServiceRole() {
   return Boolean(
@@ -20,29 +20,36 @@ export function createAdminClient() {
   );
 }
 
-export async function getAlphaUserId(admin: SupabaseClient): Promise<string | null> {
+export async function getAlphaUserId(admin: SupabaseClient): Promise<AlphaUserResult> {
   try {
     const { data: listData, error: listError } = await admin.auth.admin.listUsers();
     if (listError) {
-      console.error(LOG, "listUsers error:", listError.message);
-      return null;
+      console.error("[alpha] listUsers", listError);
+    } else {
+      const existing = listData.users.find((u) => u.email === ALPHA_EMAIL);
+      if (existing) return { userId: existing.id, error: null };
     }
-
-    const existing = listData.users.find((u) => u.email === ALPHA_EMAIL);
-    if (existing) return existing.id;
 
     const { data: createData, error: createError } = await admin.auth.admin.createUser({
       email: ALPHA_EMAIL,
       email_confirm: true,
     });
     if (createError) {
-      console.error(LOG, "createUser error:", createError.message);
-      return null;
+      console.error("[alpha] createUser", createError);
+      return { userId: null, error: createError.message };
     }
 
-    return createData.user?.id ?? null;
+    const userId = createData.user?.id ?? null;
+    if (!userId) {
+      const msg = "createUser succeeded but no user id returned";
+      console.error("[alpha] createUser", msg);
+      return { userId: null, error: msg };
+    }
+
+    return { userId, error: null };
   } catch (err) {
-    console.error(LOG, "getAlphaUserId unexpected error:", err);
-    return null;
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[alpha] getAlphaUserId unexpected", err);
+    return { userId: null, error: message };
   }
 }

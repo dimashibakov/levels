@@ -23,8 +23,9 @@ export async function GET() {
     }
 
     const admin = createAdminClient();
-    const alphaUserId = await getAlphaUserId(admin);
+    const { userId: alphaUserId, error: alphaError } = await getAlphaUserId(admin);
     out.alphaUserId = alphaUserId;
+    out.alphaError = alphaError;
 
     if (!alphaUserId) {
       out.insertSession = { id: null, error: "no alpha user id", code: null };

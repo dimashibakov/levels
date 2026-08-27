@@ -14,7 +14,7 @@ async function getLatestTier(): Promise<Tier | null> {
 
   try {
     const admin = createAdminClient();
-    const userId = await getAlphaUserId(admin);
+    const { userId } = await getAlphaUserId(admin);
     if (!userId) return null;
 
     const { data, error } = await admin

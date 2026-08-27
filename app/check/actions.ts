@@ -15,7 +15,7 @@ export async function submitCheck(answers: CheckAnswers): Promise<ScoreResult> {
 
   try {
     const admin = createAdminClient();
-    const userId = await getAlphaUserId(admin);
+    const { userId } = await getAlphaUserId(admin);
     if (!userId) {
       console.error(LOG, "no alpha user id");
       return result;

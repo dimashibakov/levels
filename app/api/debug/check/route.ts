@@ -49,8 +49,40 @@ function keyFingerprint() {
   };
 }
 
+async function rawRest() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    return { status: null, body: "skipped — missing url or service key" };
+  }
+  try {
+    const res = await fetch(`${url}/auth/v1/admin/users?page=1&per_page=1`, {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    });
+    const text = await res.text();
+    return {
+      status: res.status,
+      body: text.length > 300 ? `${text.slice(0, 300)}…` : text,
+    };
+  } catch (err) {
+    return {
+      status: null,
+      body: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export async function GET() {
-  const out: Record<string, unknown> = { keyFingerprint: keyFingerprint() };
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? null;
+  const out: Record<string, unknown> = {
+    keyFingerprint: keyFingerprint(),
+    url,
+    urlHasWhitespace: url ? /\s/.test(url) : false,
+    rawRest: await rawRest(),
+  };
 
   try {
     out.hasServiceRole = hasServiceRole();

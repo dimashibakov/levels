@@ -1,7 +1,7 @@
 // TEMPORARY DIAGNOSTIC — delete after debugging.
 
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, getAlphaUserId, hasServiceRole } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -16,47 +16,27 @@ export async function GET() {
   const out: Record<string, unknown> = {};
 
   try {
-    const hasUrl = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
-    const hasAnonKey = Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-    out.env = { hasUrl, hasAnonKey };
+    out.hasServiceRole = hasServiceRole();
 
-    if (!hasUrl || !hasAnonKey) {
+    if (!hasServiceRole()) {
       return json(out);
     }
 
-    const supabase = createClient();
+    const admin = createAdminClient();
+    const alphaUserId = await getAlphaUserId(admin);
+    out.alphaUserId = alphaUserId;
 
-    const { data: beforeAuth, error: getUserBeforeError } = await supabase.auth.getUser();
-    out.getUserBefore = {
-      userId: beforeAuth?.user?.id ?? null,
-      error: getUserBeforeError?.message ?? null,
-    };
-
-    if (beforeAuth?.user) {
-      out.signIn = "skipped";
-    } else {
-      const { data: signInData, error: signInError } = await supabase.auth.signInAnonymously();
-      out.signIn = {
-        userId: signInData.user?.id ?? null,
-        error: signInError?.message ?? null,
-      };
-    }
-
-    const { data: writeAuth } = await supabase.auth.getUser();
-    const userAtWrite = writeAuth?.user?.id ?? null;
-    out.userAtWrite = userAtWrite;
-
-    if (!userAtWrite) {
-      out.insertSession = { id: null, error: "no user at write time", code: null };
-      out.insertResponses = { ok: false, error: "skipped — no user" };
-      out.counts = await fetchCounts(supabase);
+    if (!alphaUserId) {
+      out.insertSession = { id: null, error: "no alpha user id", code: null };
+      out.insertResponses = { ok: false, error: "skipped — no alpha user" };
+      out.counts = await fetchCounts(admin);
       return json(out);
     }
 
-    const { data: session, error: sessionError } = await supabase
+    const { data: session, error: sessionError } = await admin
       .from("check_sessions")
       .insert({
-        user_id: userAtWrite,
+        user_id: alphaUserId,
         instrument_version: "debug",
         phq_sum: 0,
         safety_flag: false,
@@ -74,9 +54,9 @@ export async function GET() {
     };
 
     if (session?.id) {
-      const { error: responsesError } = await supabase.from("check_responses").insert({
+      const { error: responsesError } = await admin.from("check_responses").insert({
         session_id: session.id,
-        user_id: userAtWrite,
+        user_id: alphaUserId,
         item_code: "debug",
         score: 0,
       });
@@ -88,7 +68,7 @@ export async function GET() {
       out.insertResponses = { ok: false, error: "skipped — session insert failed" };
     }
 
-    out.counts = await fetchCounts(supabase);
+    out.counts = await fetchCounts(admin);
     return json(out);
   } catch (e) {
     out.fatal = e instanceof Error ? e.message : String(e);
@@ -96,10 +76,10 @@ export async function GET() {
   }
 }
 
-async function fetchCounts(supabase: ReturnType<typeof createClient>) {
+async function fetchCounts(admin: ReturnType<typeof createAdminClient>) {
   const [{ count: sessions }, { count: responses }] = await Promise.all([
-    supabase.from("check_sessions").select("*", { count: "exact", head: true }),
-    supabase.from("check_responses").select("*", { count: "exact", head: true }),
+    admin.from("check_sessions").select("*", { count: "exact", head: true }),
+    admin.from("check_responses").select("*", { count: "exact", head: true }),
   ]);
   return { sessions: sessions ?? null, responses: responses ?? null };
 }

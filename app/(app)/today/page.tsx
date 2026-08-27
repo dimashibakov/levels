@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { LevelVial } from "@/components/LevelVial";
 import { TIER_META, type Tier } from "@/lib/scoring";
-import { createClient, hasSupabaseEnv } from "@/lib/supabase/server";
+import { createAdminClient, getAlphaUserId, hasServiceRole } from "@/lib/supabase/admin";
 
 const TIER_HINT: Record<Tier, string> = {
   in_level: "Steady read. Sleep and a short walk are holding you level.",
@@ -10,17 +10,17 @@ const TIER_HINT: Record<Tier, string> = {
 };
 
 async function getLatestTier(): Promise<Tier | null> {
-  if (!hasSupabaseEnv()) return null;
+  if (!hasServiceRole()) return null;
 
   try {
-    const supabase = createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) return null;
+    const admin = createAdminClient();
+    const userId = await getAlphaUserId(admin);
+    if (!userId) return null;
 
-    const { data, error } = await supabase
+    const { data, error } = await admin
       .from("check_sessions")
       .select("tier")
-      .eq("user_id", auth.user.id)
+      .eq("user_id", userId)
       .not("completed_at", "is", null)
       .order("completed_at", { ascending: false })
       .limit(1)

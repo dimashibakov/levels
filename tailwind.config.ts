@@ -4,6 +4,11 @@ const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        display: ["var(--font-display)", "Georgia", "serif"],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+      },
       colors: {
         ink: "#1B1B1F",
         ink2: "#3C3C43",
@@ -13,7 +18,6 @@ const config: Config = {
         line: "#ECEAE4",
         brand: "#5B52D9",
         brandsoft: "#EDECFB",
-        // reserved level-state palette
         good: "#7CB342",
         goodsoft: "#EEF5E4",
         mid: "#E0A32E",

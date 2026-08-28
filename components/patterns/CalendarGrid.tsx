@@ -15,57 +15,70 @@ const TIER_COLOR: Record<Tier, string> = {
   edge: "#E5533B",
 };
 
-// edge > off_level > in_level
-const TIER_SEVERITY: Record<Tier, number> = {
+// Severity rank for bucket merge: edge (worst) > off_level > in_level (best).
+const TIER_RANK: Record<Tier, number> = {
   in_level: 0,
   off_level: 1,
   edge: 2,
 };
 
-const BUCKET_STARTS = [0, 4, 8, 12, 16, 20];
+const BUCKETS = [0, 4, 8, 12, 16, 20] as const;
+
+function tierRank(tier: Tier): number {
+  return TIER_RANK[tier] ?? -1;
+}
+
+/** Keep the more severe tier when multiple checks share a day+bucket. */
+function worstTier(current: Tier | null, incoming: Tier): Tier {
+  if (current === null) return incoming;
+  return tierRank(incoming) > tierRank(current) ? incoming : current;
+}
 
 function localDateKey(d: Date): string {
+  // Local calendar date — never use UTC getters here.
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-function startOfDay(d: Date): Date {
+function startOfLocalDay(d: Date): Date {
   const copy = new Date(d);
-  copy.setHours(0, 0, 0, 0);
+  copy.setHours(0, 0, 0, 0); // local midnight
   return copy;
 }
 
-function last7Days(): Date[] {
-  const today = startOfDay(new Date());
+function last7LocalDays(): Date[] {
+  const today = startOfLocalDay(new Date());
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
-    d.setDate(d.getDate() - (6 - i));
+    d.setDate(d.getDate() - (6 - i)); // local date arithmetic
     return d;
   });
 }
 
-function bucketIndex(hour: number): number {
-  if (hour < 4) return 0;
-  if (hour < 8) return 1;
-  if (hour < 12) return 2;
-  if (hour < 16) return 3;
-  if (hour < 20) return 4;
+/** Map local hour (0–23) to bucket column 0–5. */
+function localBucketIndex(hourLocal: number): number {
+  if (hourLocal < 4) return 0;
+  if (hourLocal < 8) return 1;
+  if (hourLocal < 12) return 2;
+  if (hourLocal < 16) return 3;
+  if (hourLocal < 20) return 4;
   return 5;
 }
 
-function sessionTimestamp(s: CheckSessionRow): Date {
-  return new Date(s.completed_at ?? s.started_at);
+function sessionLocalDate(s: CheckSessionRow): Date {
+  const iso = s.completed_at ?? s.started_at;
+  return new Date(iso); // parsed instant; getters below use local timezone
 }
 
 function computeStreak(sessions: CheckSessionRow[]): number {
   const daysWithChecks = new Set<string>();
   for (const s of sessions) {
-    daysWithChecks.add(localDateKey(sessionTimestamp(s)));
+    daysWithChecks.add(localDateKey(sessionLocalDate(s)));
   }
 
-  const today = startOfDay(new Date());
+  const today = startOfLocalDay(new Date());
   let streak = 0;
   for (let offset = 0; offset < 365; offset++) {
     const d = new Date(today);
@@ -77,20 +90,19 @@ function computeStreak(sessions: CheckSessionRow[]): number {
 }
 
 function buildGrid(sessions: CheckSessionRow[]) {
-  const days = last7Days();
-  const grid: (Tier | null)[][] = days.map(() => Array(BUCKET_STARTS.length).fill(null));
+  const days = last7LocalDays();
+  const grid: (Tier | null)[][] = days.map(() =>
+    Array.from({ length: BUCKETS.length }, (): Tier | null => null),
+  );
 
   for (const s of sessions) {
-    const at = sessionTimestamp(s);
+    const at = sessionLocalDate(s);
     const dayIdx = days.findIndex((day) => localDateKey(day) === localDateKey(at));
     if (dayIdx === -1) continue;
 
-    const b = bucketIndex(at.getHours());
-    const prev = grid[dayIdx][b];
+    const bucket = localBucketIndex(at.getHours()); // local hour, not getUTCHours()
     // Multiple checks in one bucket: show the MOST SEVERE tier (edge > off_level > in_level).
-    if (!prev || TIER_SEVERITY[s.tier] > TIER_SEVERITY[prev]) {
-      grid[dayIdx][b] = s.tier;
-    }
+    grid[dayIdx][bucket] = worstTier(grid[dayIdx][bucket], s.tier);
   }
 
   return { days, grid };
@@ -119,19 +131,20 @@ export function CalendarGrid({ sessions }: CalendarGridProps) {
 
       <div className="overflow-x-auto">
         <div className="min-w-[280px]">
-          {/* hour labels */}
           <div className="mb-2 grid grid-cols-[36px_repeat(6,1fr)] gap-1">
             <div />
-            {BUCKET_STARTS.map((h) => (
+            {BUCKETS.map((h) => (
               <div key={h} className="text-center text-[10px] font-semibold text-mute">
                 {String(h).padStart(2, "0")}
               </div>
             ))}
           </div>
 
-          {/* day rows — oldest at top, today at bottom */}
           {days.map((day, rowIdx) => (
-            <div key={localDateKey(day)} className="mb-1.5 grid grid-cols-[36px_repeat(6,1fr)] items-center gap-1">
+            <div
+              key={localDateKey(day)}
+              className="mb-1.5 grid grid-cols-[36px_repeat(6,1fr)] items-center gap-1"
+            >
               <div className="text-[11px] font-semibold text-mute">{dayLabel(day)}</div>
               {grid[rowIdx].map((tier, colIdx) => (
                 <div key={colIdx} className="flex justify-center py-1">

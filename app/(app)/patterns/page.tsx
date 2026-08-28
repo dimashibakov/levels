@@ -3,6 +3,9 @@ import type { Tier } from "@/lib/scoring";
 import { Analytics } from "@/components/patterns/Analytics";
 import { CalendarGrid, type CheckSessionRow } from "@/components/patterns/CalendarGrid";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 async function getCheckSessions(): Promise<CheckSessionRow[]> {
   if (!hasServiceRole()) return [];
 

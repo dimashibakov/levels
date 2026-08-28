@@ -3,6 +3,9 @@ import { LevelVial } from "@/components/LevelVial";
 import { TIER_META, type Tier } from "@/lib/scoring";
 import { createAdminClient, getAlphaUserId, hasServiceRole } from "@/lib/supabase/admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const TIER_HINT: Record<Tier, string> = {
   in_level: "Steady read. Sleep and a short walk are holding you level.",
   off_level: "Something's pulling you off level. Worth a closer look.",

@@ -1,5 +1,6 @@
 import { createAdminClient, getAlphaUserId, hasServiceRole } from "@/lib/supabase/admin";
 import type { Tier } from "@/lib/scoring";
+import { Analytics } from "@/components/patterns/Analytics";
 import { CalendarGrid, type CheckSessionRow } from "@/components/patterns/CalendarGrid";
 
 async function getCheckSessions(): Promise<CheckSessionRow[]> {
@@ -46,6 +47,12 @@ export default async function Patterns() {
         <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-brand">Check history</h2>
         {sessions.length === 0 ? <EmptyHistory /> : <CalendarGrid sessions={sessions} />}
       </div>
+
+      {sessions.length > 0 && (
+        <div className="mt-4 rounded-card bg-card p-5 shadow-sm">
+          <Analytics sessions={sessions} />
+        </div>
+      )}
     </div>
   );
 }

@@ -23,9 +23,7 @@ export function createAdminClient() {
 export async function getAlphaUserId(admin: SupabaseClient): Promise<AlphaUserResult> {
   try {
     const { data: listData, error: listError } = await admin.auth.admin.listUsers();
-    if (listError) {
-      console.error("[alpha] listUsers", listError);
-    } else {
+    if (!listError) {
       const existing = listData.users.find((u) => u.email === ALPHA_EMAIL);
       if (existing) return { userId: existing.id, error: null };
     }
@@ -35,21 +33,17 @@ export async function getAlphaUserId(admin: SupabaseClient): Promise<AlphaUserRe
       email_confirm: true,
     });
     if (createError) {
-      console.error("[alpha] createUser", createError);
       return { userId: null, error: createError.message };
     }
 
     const userId = createData.user?.id ?? null;
     if (!userId) {
-      const msg = "createUser succeeded but no user id returned";
-      console.error("[alpha] createUser", msg);
-      return { userId: null, error: msg };
+      return { userId: null, error: "createUser succeeded but no user id returned" };
     }
 
     return { userId, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[alpha] getAlphaUserId unexpected", err);
     return { userId: null, error: message };
   }
 }

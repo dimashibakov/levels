@@ -3,8 +3,6 @@
 import { scoreCheck, INSTRUMENT_VERSION, type CheckAnswers, type ScoreResult } from "@/lib/scoring";
 import { createAdminClient, getAlphaUserId, hasServiceRole } from "@/lib/supabase/admin";
 
-const LOG = "[levels:submitCheck]";
-
 // Compute the tier server-side and (if Supabase service role is wired)
 // persist the session and item-level responses under the alpha user.
 // Safe to call without service role: it just returns the computed result without writing.
@@ -16,10 +14,7 @@ export async function submitCheck(answers: CheckAnswers): Promise<ScoreResult> {
   try {
     const admin = createAdminClient();
     const { userId } = await getAlphaUserId(admin);
-    if (!userId) {
-      console.error(LOG, "no alpha user id");
-      return result;
-    }
+    if (!userId) return result;
 
     const { data: session, error: sessionError } = await admin
       .from("check_sessions")
@@ -34,12 +29,8 @@ export async function submitCheck(answers: CheckAnswers): Promise<ScoreResult> {
       .select("id")
       .single();
 
-    if (sessionError) {
-      console.error(LOG, "check_sessions insert error:", sessionError.message, sessionError.code);
-      return result;
-    }
-    if (!session) {
-      console.error(LOG, "check_sessions insert returned no row");
+    if (sessionError || !session) {
+      console.error("[submitCheck] check_sessions insert failed:", sessionError?.message ?? "no row");
       return result;
     }
 
@@ -50,10 +41,10 @@ export async function submitCheck(answers: CheckAnswers): Promise<ScoreResult> {
 
     const { error: responsesError } = await admin.from("check_responses").insert(rows);
     if (responsesError) {
-      console.error(LOG, "check_responses insert error:", responsesError.message, responsesError.code);
+      console.error("[submitCheck] check_responses insert failed:", responsesError.message);
     }
-  } catch (err) {
-    console.error(LOG, "unexpected error:", err);
+  } catch {
+    // best-effort persistence — never block the result
   }
 
   return result;
